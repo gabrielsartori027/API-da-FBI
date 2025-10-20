@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>FBI Wanted List</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Lista dos Procurados do FBI professo</h1>
+        <hr>
+
+        <div class="mb-3">
+            <label for="searchInput" class="form-label">Buscar por Nome (Título):</label>
+            <input type="text" class="form-control" id="searchInput" placeholder="Digite o nome...">
+        </div>
+
+        <div class="mb-3">
+            <label for="categorySelect" class="form-label">Categoria:</label>
+            <select class="form-select" id="categorySelect">
+                <option value="">Todas</option>
+                <option value="fugitives">Fugitivos</option>
+                <option value="terrorism">Terrorismo</option>
+                <option value="kidnappings-missing-persons">Sequestros/Pessoas Desaparecidas</option>
+                <option value="seeking-information">Buscando Informações</option>
+                <option value="violations-of-statutes">Violações de Estatutos</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <button class="btn btn-primary" id="searchBtn">Buscar</button>
+            <button class="btn btn-secondary" id="resetBtn">Limpar Filtros</button>
+            <button class="btn btn-info" id="loadAllBtn">Carregar Primeira Página</button>
+        </div>
+
+        <div id="loading" class="alert alert-info" style="display:none;">
+            Carregando os dados, servidor ta lento calmo.
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentData = []; 
+
+        async function fetchData(searchTerm = null, category = null) {
+            document.getElementById("loading").style.display = "block";
+            document.getElementById("results").innerHTML = "";
+            let url = "https://api.fbi.gov/wanted/v1/list";
+            let params = [];
+
+            if (searchTerm) {
+                params.push(`title=${encodeURIComponent(searchTerm)}`);
+            }
+            if (category) {
+                params.push(`subjects=${encodeURIComponent(category)}`);
+            }
+
+            if (params.length > 0) {
+                url += `?${params.join("&")}`;
+            }
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                currentData = data.items || [];
+                showResults();
+            } catch (error) {
+                console.error("Erro ao carregar dados:", error);
+                document.getElementById("results").innerHTML = `<div class="alert alert-danger">Erro ao carregar dados. ${error.message}. Tente recarregar a página.</div>`;
+            } finally {
+                document.getElementById("loading").style.display = "none";
+            }
+        }
+
+        function performSearch() {
+            const searchTerm = document.getElementById("searchInput").value;
+            const category = document.getElementById("categorySelect").value;
+            fetchData(searchTerm, category);
+        }
+
+        function resetFilters() {
+            document.getElementById("searchInput").value = "";
+            document.getElementById("categorySelect").value = "";
+            fetchData();
+        }
+
+        function loadInitialPage() {
+            fetchData();
+        }
+
+        function showResults() {
+            let resultsDiv = document.getElementById("results");
+            resultsDiv.innerHTML = "";
+
+            if (currentData.length === 0) {
+                resultsDiv.innerHTML = "<p class=\"alert alert-warning\">Nenhum resultado encontrado</p>";
+                return;
+            }
+
+            resultsDiv.innerHTML = `<p class="alert alert-success">Total de resultados: ${currentData.length}</p>`;
+            currentData.forEach(item => {
+                let image = item.images && item.images.length > 0 ? item.images[0].thumb : "https://via.placeholder.com/200";
+                let category = item.subjects && item.subjects.length > 0 ? item.subjects[0] : "Sem categoria";
+                let reward = item.reward_text ? item.reward_text : "Sem recompensa";
+                let html = `
+                    <div class="card mb-3">
+                        <div class="row g-0">
+                            <div class="col-md-3">
+                                <img src="${image}" class="img-fluid rounded-start" alt="${item.title}" style="height: 200px; object-fit: cover;">
+                            </div>
+                            <div class="col-md-9">
+                                <div class="card-body">
+                                    <h5 class="card-title">${item.title}</h5>
+                                    <p class="card-text"><strong>Categoria:</strong> ${category}</p>
+                                    <p class="card-text"><strong>Recompensa:</strong> ${reward}</p>
+                                    <button class="btn btn-sm btn-primary" onclick="showDetails('${item.uid}')">Ver Detalhes</button>
+                                </div>
+                            </div>
+_                       </div>
+                    </div>
+                `;
+                resultsDiv.innerHTML += html;
+            });
+        }
+
+        async function showDetails(uid) {
+
+            alert("Buscando detalhes... por favor, aguarde.");
+            const url = `https://api.fbi.gov/wanted/v1/view?uid=${uid}`;
+
+            try {
+                const response = await fetch(url);
+                const item = await response.json(); 
+                let details = `
+                    Título: ${item.title}
+                    Sexo: ${item.sex || "N/A"}
+                    Raça: ${item.race || "N/A"}
+                    Altura: ${item.height_min || "N/A"}
+                    Peso: ${item.weight_min || "N/A"}
+                    Data de Nascimento: ${item.dates_of_birth_used && item.dates_of_birth_used.length > 0 ? item.dates_of_birth_used[0] : "N/A"}
+                    Descrição: ${item.description || "N/A"}
+                    Recompensa: ${item.reward_text || "N/A"}
+                    URL: ${item.url}
+                `;
+   alert(details);
+
+            } catch (error) {
+                console.error("Erro ao buscar detalhes:", error);
+                alert("Não foi possível carregar os detalhes do item.");
+            }
+        }
+
+        document.getElementById("searchBtn").addEventListener("click", performSearch);
+        document.getElementById("resetBtn").addEventListener("click", resetFilters);
+        document.getElementById("loadAllBtn").addEventListener("click", loadInitialPage);
+        document.getElementById("categorySelect").addEventListener("change", performSearch); 
+        document.getElementById("searchInput").addEventListener("keypress", function(e) {
+            if (e.key === "Enter") performSearch();
+        });
+
+        loadInitialPage();
+    </script>
+
+    <footer class="text-center mt-5 mb-3">
+        <hr>
+        <p>Gabriel Sartori</p>
+    </footer>
+
+</body>
+</html>
