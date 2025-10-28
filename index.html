@@ -1,171 +1,177 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0">
- <title>FBI Wanted List</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lista - FBI + Logs</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container mt-5">
-        <h1>Lista dos Procurados do FBI professo</h1>
-        <hr>
+<div class="container mt-4">
+  <h3>Procurados (FBI)</h3>
 
-        <div class="mb-3">
-            <label for="searchInput" class="form-label">Buscar por Nome (Título):</label>
-            <input type="text" class="form-control" id="searchInput" placeholder="Digite o nome...">
-        </div>
+  <div class="row g-2 mb-2">
+    <div class="col-md-5">
+      <input id="searchInput" class="form-control" placeholder="Buscar por título">
+    </div>
+    <div class="col-md-3">
+      <select id="categorySelect" class="form-select">
+        <option value="">Todas</option>
+        <option value="fugitives">Fugitivos</option>
+        <option value="terrorism">Terrorismo</option>
+        <option value="kidnappings-missing-persons">Sequestros</option>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <button id="searchBtn" class="btn btn-primary">Buscar</button>
+      <button id="resetBtn" class="btn btn-secondary">Limpar</button>
+      <button id="loadAllBtn" class="btn btn-info">Carregar</button>
+    </div>
+  </div>
 
-        <div class="mb-3">
-            <label for="categorySelect" class="form-label">Categoria:</label>
-            <select class="form-select" id="categorySelect">
-                <option value="">Todas</option>
-                <option value="fugitives">Fugitivos</option>
-                <option value="terrorism">Terrorismo</option>
-                <option value="kidnappings-missing-persons">Sequestros/Pessoas Desaparecidas</option>
-                <option value="seeking-information">Buscando Informações</option>
-                <option value="violations-of-statutes">Violações de Estatutos</option>
-            </select>
-        </div>
+  <div class="input-group mb-3" style="max-width:720px;">
+    <input id="matriculaInput" class="form-control" placeholder="Matrícula (ex: 123456)">
+    <button id="showLogsBtn" class="btn btn-outline-info">Exibir logs</button>
+    <button id="insertLogBtn" class="btn btn-outline-success">Inserir log</button>
+    <button id="deleteLogBtn" class="btn btn-outline-danger">Excluir log</button>
+  </div>
 
-        <div class="mb-3">
-            <button class="btn btn-primary" id="searchBtn">Buscar</button>
-            <button class="btn btn-secondary" id="resetBtn">Limpar Filtros</button>
-            <button class="btn btn-info" id="loadAllBtn">Carregar Primeira Página</button>
-        </div>
+  <div id="loading" class="alert alert-info" style="display:none">Carregando...</div>
+  <div id="results"></div>
+</div>
 
-        <div id="loading" class="alert alert-info" style="display:none;">
-            Carregando os dados, servidor ta lento calmo.
-        </div>
+<script>
+const $ = id => document.getElementById(id);
 
-        <div id="results"></div>
-    </div>
+function escaparHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        let currentData = []; 
+async function buscarDados(busca = '', categoria = '') {
+  $('loading').style.display = 'block';
+  $('results').innerHTML = '';
+  try {
+    let url = 'https://api.fbi.gov/wanted/v1/list';
+    const params = [];
+    if (busca) params.push('title=' + encodeURIComponent(busca));
+    if (categoria) params.push('subjects=' + encodeURIComponent(categoria));
+    if (params.length) url += '?' + params.join('&');
+    const res = await fetch(url);
+    const data = await res.json();
+    mostrarResultados(data.items || []);
+  } catch (e) {
+    $('results').innerHTML = `<div class="alert alert-danger">Erro: ${escaparHtml(e.message)}</div>`;
+  } finally { $('loading').style.display = 'none'; }
+}
 
-        async function fetchData(searchTerm = null, category = null) {
-            document.getElementById("loading").style.display = "block";
-            document.getElementById("results").innerHTML = "";
-            let url = "https://api.fbi.gov/wanted/v1/list";
-            let params = [];
+function mostrarResultados(items){
+  const out = $('results');
+  if (!items || !items.length) { out.innerHTML = '<div class="alert alert-warning">Nenhum resultado</div>'; return; }
+  out.innerHTML = `<div class="alert alert-success">Total: ${items.length}</div>`;
+  items.forEach(i => {
+    const img = i.images && i.images[0] ? i.images[0].thumb : 'https://via.placeholder.com/200';
+    const cat = i.subjects && i.subjects[0] ? i.subjects[0] : 'Sem categoria';
+    out.innerHTML += `
+      <div class="card mb-2">
+        <div class="row g-0">
+          <div class="col-3"><img src="${img}" class="img-fluid" style="height:120px;object-fit:cover"></div>
+          <div class="col-9 p-2">
+            <strong>${escaparHtml(i.title)}</strong><br>
+            <small>Categoria: ${escaparHtml(cat)} — Recompensa: ${escaparHtml(i.reward_text || 'N/A')}</small><br>
+            <button class="btn btn-sm btn-primary mt-1" onclick="mostrarDetalhes('${i.uid}')">Ver detalhes</button>
+          </div>
+        </div>
+      </div>`;
+  });
+}
 
-            if (searchTerm) {
-                params.push(`title=${encodeURIComponent(searchTerm)}`);
-            }
-            if (category) {
-                params.push(`subjects=${encodeURIComponent(category)}`);
-            }
+async function mostrarDetalhes(uid){
+  try{
+    const res = await fetch(`https://api.fbi.gov/wanted/v1/view?uid=${uid}`);
+    const item = await res.json();
+    alert(
+`Título: ${item.title}
+Sexo: ${item.sex || 'N/A'}
+Raça: ${item.race || 'N/A'}
+Nascimento: ${item.dates_of_birth_used?.[0] || 'N/A'}
+Descrição: ${item.description ? item.description.slice(0,800) : 'N/A'}
+URL: ${item.url || 'N/A'}`
+    );
+  }catch(e){ alert('Erro ao carregar detalhes'); }
+}
+// aqui é para mostrar as logs, no inicio estava dando erro por conta que eu nao tava armazenando a resposta da api em uma variavel text, agora ta funcionando certin
+async function exibirLogs(){
+  const matricula = $('matriculaInput').value.trim();
+  if(!matricula){ alert('Informe a matrícula'); return; }
+  $('loading').style.display = 'block'; $('results').innerHTML = '';
+  const url = `https://www.piway.com.br/unoesc/api/logs/${encodeURIComponent(matricula)}`;
+  try{
+    const res = await fetch(url);
+    const text = await res.text();
+    let data;
+    try{ data = JSON.parse(text); }catch{ data = text; }
+    if(!res.ok){ $('results').innerHTML = `<div class="alert alert-danger">${escaparHtml(String(data))}</div>`; return; }
+    if(Array.isArray(data)){
+      if(!data.length) $('results').innerHTML = '<div class="alert alert-warning">Nenhum log encontrado</div>';
+      else {
+        $('results').innerHTML = data.map(d => `<pre style="white-space:pre-wrap">${escaparHtml(JSON.stringify(d, null,2))}</pre>`).join('<hr>');
+      }
+    } else {
+      $('results').innerHTML = `<pre>${escaparHtml(typeof data === 'string' ? data : JSON.stringify(data,null,2))}</pre>`;
+    }
+  }catch(e){
+    $('results').innerHTML = `<div class="alert alert-danger">Erro: ${escaparHtml(e.message)}</div>`;
+  }finally{ $('loading').style.display = 'none'; }
+}
+// aq eu fiz um inserirLog inserir e também ja deixei uma mensagem se caso der erro por ex, não colocar nada ou colocar algo errado.
+async function inserirLog(){
+  const matricula = $('matriculaInput').value.trim();
+  if(!matricula){ alert('Informe a matrícula'); return; }
+  const api = prompt('Nome da API (ex: fbi):','fbi'); if(api===null) return;
+  const metodo = prompt('Método/rota:','buscar'); if(metodo===null) return;
+  const resultado = prompt('Resultado (texto curto):','OK'); if(resultado===null) return;
+  const url = `https://www.piway.com.br/unoesc/api/inserir/log/${encodeURIComponent(matricula)}/${encodeURIComponent(api)}/${encodeURIComponent(metodo)}/${encodeURIComponent(resultado)}`;
+  // abrir link pronto (prático) e tentar mostrar resposta
+  window.open(url,'_blank');
+  try{
+    const res = await fetch(url);
+    const text = await res.text();
+    $('results').innerHTML = `<div class="alert alert-success">${escaparHtml(text)}</div>`;
+  }catch(e){
+    $('results').innerHTML = `<div class="alert alert-warning">Inserção enviada (resposta não disponível por CORS)</div>`;
+  }
+}
+// aqui eu fiz um deleteLog para excluir a log basicamente, só limpo e excluo, e tbm deixei uma mensagem para caso exclua uma log errada e tal
+async function excluirLog(){
+  const matricula = $('matriculaInput').value.trim();
+  if(!matricula){ alert('Informe a matrícula'); return; }
+  const id = prompt('ID do log a excluir:'); if(!id) return;
+  if(!confirm(`Excluir log ${id} da matrícula ${matricula}?`)) return;
+  const url = `https://www.piway.com.br/unoesc/api/excluir/log/${encodeURIComponent(id)}/aluno/${encodeURIComponent(matricula)}`;
+  $('loading').style.display = 'block'; $('results').innerHTML = '';
+  try{
+    let res = await fetch(url);
+    if(!res.ok) res = await fetch(url, { method:'DELETE' });
+    const text = await res.text();
+    $('results').innerHTML = `<div class="alert alert-info">${escaparHtml(text)}</div>`;
+  }catch(e){
+    window.open(url,'_blank');
+    $('results').innerHTML = `<div class="alert alert-warning">Não foi possível executar via fetch (CORS). Abra a nova aba criada.</div>`;
+  }finally{ $('loading').style.display = 'none'; }
+}
 
-            if (params.length > 0) {
-                url += `?${params.join("&")}`;
-            }
+// só copiei e colei todos os eventos e apena smudei oq precisava, precisei de um pouco de ajuda da IA infelizmente mas deu certo
+$('searchBtn').addEventListener('click', ()=> buscarDados($('searchInput').value, $('categorySelect').value));
+$('resetBtn').addEventListener('click', ()=> { $('searchInput').value=''; $('categorySelect').value=''; buscarDados(); });
+$('loadAllBtn').addEventListener('click', ()=> buscarDados());
+$('searchInput').addEventListener('keypress', e=> { if(e.key==='Enter') buscarDados($('searchInput').value, $('categorySelect').value); });
+$('showLogsBtn').addEventListener('click', exibirLogs);
+$('insertLogBtn').addEventListener('click', inserirLog);
+$('deleteLogBtn').addEventListener('click', excluirLog);
 
-            try {
-                const response = await fetch(url);
-                const data = await response.json();
-                currentData = data.items || [];
-                showResults();
-            } catch (error) {
-                console.error("Erro ao carregar dados:", error);
-                document.getElementById("results").innerHTML = `<div class="alert alert-danger">Erro ao carregar dados. ${error.message}. Tente recarregar a página.</div>`;
-            } finally {
-                document.getElementById("loading").style.display = "none";
-            }
-        }
-
-        function performSearch() {
-            const searchTerm = document.getElementById("searchInput").value;
-            const category = document.getElementById("categorySelect").value;
-            fetchData(searchTerm, category);
-        }
-
-        function resetFilters() {
-            document.getElementById("searchInput").value = "";
-            document.getElementById("categorySelect").value = "";
-            fetchData();
-        }
-
-        function loadInitialPage() {
-            fetchData();
-        }
-
-        function showResults() {
-            let resultsDiv = document.getElementById("results");
-            resultsDiv.innerHTML = "";
-
-            if (currentData.length === 0) {
-                resultsDiv.innerHTML = "<p class=\"alert alert-warning\">Nenhum resultado encontrado</p>";
-                return;
-            }
-
-            resultsDiv.innerHTML = `<p class="alert alert-success">Total de resultados: ${currentData.length}</p>`;
-            currentData.forEach(item => {
-                let image = item.images && item.images.length > 0 ? item.images[0].thumb : "https://via.placeholder.com/200";
-                let category = item.subjects && item.subjects.length > 0 ? item.subjects[0] : "Sem categoria";
-                let reward = item.reward_text ? item.reward_text : "Sem recompensa";
-                let html = `
-                    <div class="card mb-3">
-                        <div class="row g-0">
-                            <div class="col-md-3">
-                                <img src="${image}" class="img-fluid rounded-start" alt="${item.title}" style="height: 200px; object-fit: cover;">
-                            </div>
-                            <div class="col-md-9">
-                                <div class="card-body">
-                                    <h5 class="card-title">${item.title}</h5>
-                                    <p class="card-text"><strong>Categoria:</strong> ${category}</p>
-                                    <p class="card-text"><strong>Recompensa:</strong> ${reward}</p>
-                                    <button class="btn btn-sm btn-primary" onclick="showDetails('${item.uid}')">Ver Detalhes</button>
-                                </div>
-                            </div>
-_                       </div>
-                    </div>
-                `;
-                resultsDiv.innerHTML += html;
-            });
-        }
-
-        async function showDetails(uid) {
-
-            alert("Buscando detalhes... por favor, aguarde.");
-            const url = `https://api.fbi.gov/wanted/v1/view?uid=${uid}`;
-
-            try {
-                const response = await fetch(url);
-                const item = await response.json(); 
-                let details = `
-                    Título: ${item.title}
-                    Sexo: ${item.sex || "N/A"}
-                    Raça: ${item.race || "N/A"}
-                    Altura: ${item.height_min || "N/A"}
-                    Peso: ${item.weight_min || "N/A"}
-                    Data de Nascimento: ${item.dates_of_birth_used && item.dates_of_birth_used.length > 0 ? item.dates_of_birth_used[0] : "N/A"}
-                    Descrição: ${item.description || "N/A"}
-                    Recompensa: ${item.reward_text || "N/A"}
-                    URL: ${item.url}
-                `;
-   alert(details);
-
-            } catch (error) {
-                console.error("Erro ao buscar detalhes:", error);
-                alert("Não foi possível carregar os detalhes do item.");
-            }
-        }
-
-        document.getElementById("searchBtn").addEventListener("click", performSearch);
-        document.getElementById("resetBtn").addEventListener("click", resetFilters);
-        document.getElementById("loadAllBtn").addEventListener("click", loadInitialPage);
-        document.getElementById("categorySelect").addEventListener("change", performSearch); 
-        document.getElementById("searchInput").addEventListener("keypress", function(e) {
-            if (e.key === "Enter") performSearch();
-        });
-
-        loadInitialPage();
-    </script>
-
-    <footer class="text-center mt-5 mb-3">
+buscarDados();
+</script>
+     <footer class="text-center mt-5 mb-3">
         <hr>
-        <p>Gabriel Sartori</p>
+        <p>Gabriel Sartori / Unoesc - 2025
     </footer>
 
 </body>
